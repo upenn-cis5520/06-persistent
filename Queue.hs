@@ -52,7 +52,7 @@ enq = undefined
 deq = undefined
 
 {-
-4. Make an `Arbitrary`` instance, including definitions for both `arbitrary` and `shrink`
+4. Make an `Arbitrary` instance, including definitions for both `arbitrary` and `shrink`
 -}
 
 {-
