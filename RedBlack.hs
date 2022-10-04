@@ -408,7 +408,7 @@ prop_ShrinkValid t = conjoin (map prop_Valid (shrink t))
 {-
 * Metamorphic Testing
 
-The idead of metamorphic testing is to describe the relationship between
+The idea of metamorphic testing is to describe the relationship between
  multiple function calls in the interface. Focusing on `empty`, `insert`,
  `delete`, and `member`, we can define the following tests:
 -}
@@ -436,7 +436,7 @@ prop_DeleteInsert :: A -> A -> RBT A -> Bool
 prop_DeleteInsert k k0 t =
   delete k (insert k0 t)
     == if k == k0
-      then t
+      then if member k0 t then delete k t else t
       else insert k0 (delete k t)
 
 {-
@@ -461,6 +461,18 @@ prop_MemberInsert k k0 t =
 prop_MemberDelete :: A -> A -> RBT A -> Bool
 prop_MemberDelete k k0 t =
   member k (delete k0 t) == (k /= k0 && member k t)
+
+-- Run all of the metamorphic tests
+checkMetamorphic :: IO ()
+checkMetamorphic = do
+  quickCheck $ withMaxSuccess 10000 prop_InsertEmpty
+  quickCheck $ withMaxSuccess 10000 prop_InsertInsert
+  quickCheck $ withMaxSuccess 10000 prop_InsertDelete
+  quickCheck $ withMaxSuccess 10000 prop_DeleteEmpty
+  quickCheck $ withMaxSuccess 10000 prop_DeleteInsert
+  quickCheck $ withMaxSuccess 10000 prop_DeleteDelete
+  quickCheck $ withMaxSuccess 10000 prop_MemberInsert
+  quickCheck $ withMaxSuccess 10000 prop_MemberDelete
 
 {-
 Implementing the API
