@@ -1,7 +1,7 @@
 {-
 ---
 fulltitle: Red Black Trees
-date: October 12, 2022
+date: October 9, 2023
 ---
 
 This module implements a persistent version of a common balanced tree
