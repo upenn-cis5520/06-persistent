@@ -11,6 +11,7 @@ library
   exposed-modules:     RedBlack
   build-depends:       base >= 4.15
                      , QuickCheck >= 2.14
+                     , containers
   default-language:    GHC2021
   default-extensions:
    

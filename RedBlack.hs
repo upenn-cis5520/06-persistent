@@ -1,7 +1,6 @@
 {-
 ---
 fulltitle: Red Black Trees
-date: October 9, 2023
 ---
 
 This module implements a persistent version of a common balanced tree
@@ -10,23 +9,18 @@ structure: red-black trees.
 It serves as both a demonstration of a *pure* functional data structure
 and as an additional use-case for QuickCheck.
 
-However, before reading the rest of this module, you should first watch
+Before reading the rest of this module, you should first watch
 this keynote presentation by John Hughes, one of the inventors of QuickCheck.
 
-* [How to Specify It! A guide to writing properties of pure
+\* [How to Specify It! A guide to writing properties of pure
    functions](https://www.youtube.com/watch?v=G0NUOst-53U)
 
-This week's quiz will cover both the video and the module below. If you would
-rather read the material than watch the presentation, you can find the
-associated paper [here](https://research.chalmers.se/en/publication/517894).
+If you would rather read a paper than watch a talk, John Hughes also has
+written a [paper](https://research.chalmers.se/en/publication/517894) about
+this talk.
 
-Warning: we are going to use a few GHC extensions in this module.  We'll
- explain these extensions as we use them below. Most of the extensions are
-listed in the [cabal file](cis5520-persistent.cabal) and are useful in
-most Haskell projects. However, this one should be treated with care, so we
-explicitly enable it below and explain it at the end of the file.
+The `06-persisent` quiz covers both the video and the module below.
 -}
-{-# LANGUAGE TemplateHaskell #-}
 
 module RedBlack where
 
@@ -35,12 +29,15 @@ We'll make the following standard library functions available for this
  implementation.
 -}
 
-import qualified Data.Foldable as Foldable
+import Data.Foldable qualified as Foldable
 {-
-And we'll use QuickCheck for testing.
+And we'll use QuickCheck for testing. We'll import some of the most commonly
+used types, operators, and functions without qualification. And then make the
+rest of the library available with the prefix `QC.`
 -}
 
-import Test.QuickCheck hiding (elements)
+import Test.QuickCheck (Arbitrary (..), Gen, Property, quickCheck, (.&&.))
+import Test.QuickCheck qualified as QC
 
 {-
 API preview
@@ -75,7 +72,7 @@ memory](https://en.wikipedia.org/wiki/Red%E2%80%93black_tree).
 A red-black tree is a binary search tree where every node is marked with a
 color (red `R` or black `B`).  For brevity, we will abbreviate the standard
 tree constructors `Empty` and `Branch` as `E` and `N`. (The latter stands for
-*node*.) Using the `DeriveFoldable` language extension we can automatically
+\*node*.) Using the `DeriveFoldable` language extension we can automatically
 make this tree an instance of the `Data.Foldable` type class.
 -}
 
@@ -95,6 +92,8 @@ traversal, directly available from the `Foldable` instance.
 -}
 
 -- | List all of the elements of the finite set, in ascending order
+-- >>> elements (Root (N B (N B E 1 E) 2 (N B E 3 E)))
+-- [1,2,3]
 elements :: RBT a -> [a]
 elements = Foldable.toList
 
@@ -104,7 +103,10 @@ Instead, we will define two red-black trees to be equal when they contain
 the same elements.
 -}
 
-instance Eq a => Eq (RBT a) where
+-- >>> (Root (N B (N R E 1 E) 2 E)) == (Root (N B E 1 (N R E 2 E)))
+-- True
+instance (Eq a) => Eq (RBT a) where
+  (==) :: (Eq a) => RBT a -> RBT a -> Bool
   t1 == t2 = elements t1 == elements t2
 
 {-
@@ -118,11 +120,13 @@ color E = B
 
 {-
 We can also calculate the "black height" of a tree -- i.e. the number of black
-nodes from the root to every leaf. It is an invariant that this number is the
+nodes from the root to every leaf. It is an *invariant* that this number is the
 same for every path in the tree, so we only need to look at one side.
 -}
 
 -- | calculate the black height of the tree
+-- >>> blackHeight (N B (N R E 1 E) 2 (N R E 3 E))
+-- 2
 blackHeight :: T a -> Int
 blackHeight E = 1
 blackHeight (N c a _ _) = blackHeight a + (if c == B then 1 else 0)
@@ -148,15 +152,15 @@ about colors.
 
   4. Red nodes have black children
 
-* The first invariant is true by definition of the `color` function above. The
+\* The first invariant is true by definition of the `color` function above. The
   others we will have to maintain as we implement the various tree
   operations.
 
-* Together, these invariants imply that every red-black tree is "approximately
+\* Together, these invariants imply that every red-black tree is "approximately
   balanced", in the sense that the longest path to an `E` is no more than
   twice the length of the shortest.
 
-* From this balance property, it follows that the `member`, `insert` and
+\* From this balance property, it follows that the `member`, `insert` and
     `delete` operations will run in `O(log_2 n)` time.
 
 Sample Trees
@@ -213,8 +217,8 @@ trees =
   ]
 
 {-
-Checking validity for red-black trees
------------------------------------
+Checking validity for binary-search trees
+-----------------------------------------
 
 We can write QuickCheck properties for each of the invariants above.
 
@@ -224,22 +228,27 @@ are more efficient to check than others. Hughes suggests using an `O(n^2)`
 operation, because it obviously captures the BST invariant.
 -}
 
-isBST :: Ord a => RBT a -> Bool
+-- >>> isBST good1
+-- True
+-- >>> isBST bad4
+-- False
+isBST :: (Ord a) => RBT a -> Bool
 isBST (Root t) = aux t
   where
     aux E = True
     aux (N _ l k r) =
-      aux l && aux r
+      aux l
+        && aux r
         && all (< k) (elements (Root l))
         && all (> k) (elements (Root r))
 
 {-
 Here, we'll use a linear-time operation, and leave it to you to convince yourself
-that it is equivalent [4].
+that it more efficient and equivalent to the definition above [4].
 -}
 
 -- | A red-black tree is a BST if an inorder traversal is strictly ordered.
-isBST' :: Ord a => RBT a -> Bool
+isBST' :: (Ord a) => RBT a -> Bool
 isBST' = orderedBy (<) . elements
 
 {-
@@ -251,10 +260,10 @@ orderedBy :: (a -> a -> Bool) -> [a] -> Bool
 orderedBy op (x : y : xs) = x `op` y && orderedBy op (y : xs)
 orderedBy _ _ = True
 
-prop_isBST_isBST' :: Ord a => RBT a -> Property
-prop_isBST_isBST' t = property (isBST t == isBST' t)
-
 {-
+Checking validity for red-black trees
+-------------------------------------
+
 Now we can also think about validity properties for the colors in the tree.
 
 1. The empty tree is black. (This is trivial, nothing to do here.)
@@ -289,12 +298,19 @@ noRedRed (Root t) = aux t
 We can combine the predicates together using the following definition:
 -}
 
-valid :: Ord a => RBT a -> Bool
+valid :: (Ord a) => RBT a -> Bool
 valid t = isRootBlack t && consistentBlackHeight t && noRedRed t && isBST t
 
 {-
-Take a moment to try out the properties above on the sample trees by running
-the `testProps` function in ghci. The good trees should satisfy all of the
+And use it to reassure ourselves that the `empty` tree is valid.
+-}
+
+-- >>> valid (empty :: RBT Int)
+-- True
+
+{-
+Now, take a moment to try out the properties above on the sample trees by running
+the `testProps` function in the terminal. The good trees should satisfy all of the
 properties, whereas the bad trees should fail at least one of them.
 -}
 
@@ -303,10 +319,10 @@ testProps = mapM_ checkTree trees
   where
     checkTree (name, tree) = do
       putStrLn $ "******* Checking " ++ name ++ " *******"
-      quickCheck $ once (counterexample "RB2" $ isRootBlack tree)
-      quickCheck $ once (counterexample "RB3" $ consistentBlackHeight tree)
-      quickCheck $ once (counterexample "RB4" $ noRedRed tree)
-      quickCheck $ once (counterexample "BST" $ isBST tree)
+      quickCheck $ QC.once (QC.counterexample "RB2" $ isRootBlack tree)
+      quickCheck $ QC.once (QC.counterexample "RB3" $ consistentBlackHeight tree)
+      quickCheck $ QC.once (QC.counterexample "RB4" $ noRedRed tree)
+      quickCheck $ QC.once (QC.counterexample "BST" $ isBST tree)
 
 {-
 For convenience, we can also create a single property that combines all four
@@ -317,14 +333,14 @@ We will specialize all of the QuickCheck properties that we define to
  red-black trees that only contain small integer values.
 -}
 
-type A = Small Int
+type A = QC.Small Int
 
-prop_Valid :: RBT A -> Property
+prop_Valid :: RBT A -> QC.Property
 prop_Valid tree =
-  counterexample "RB2" (isRootBlack tree)
-    .&&. counterexample "RB3" (consistentBlackHeight tree)
-    .&&. counterexample "RB4" (noRedRed tree)
-    .&&. counterexample "BST" (isBST tree)
+  QC.counterexample "RB2" (isRootBlack tree)
+    .&&. QC.counterexample "RB3" (consistentBlackHeight tree)
+    .&&. QC.counterexample "RB4" (noRedRed tree)
+    .&&. QC.counterexample "BST" (isBST tree)
 
 {-
 Arbitrary Instance
@@ -333,31 +349,33 @@ Arbitrary Instance
 Our goal is to use QuickCheck to verify that the RBT-based set operations
 preserve these invariants. To do this, we will need an arbitrary instance for
 the `RBT` type. However, because we want to verify that `prop_Valid` is an
-*invariant* of our data structure, we only want to test our operations on
-trees that satisfy this invariant. And not many do!
--}
+\*invariant* of our data structure, we only want to test our operations on
+trees that satisfy this invariant. And not many do [5]!
 
-{-
 Therefore, we will make sure that our `RBT` generator only produces valid
 red-black trees. How can we do this?
 
 The key idea is to use a generator based on the `insert` and `empty` operations
-that we will define later.
+that we will define define.  Given a list elements, we can used `foldr` to
+construct a red-black tree:
+-}
 
+fromList :: (Ord a) => [a] -> RBT a
+fromList = foldr insert empty
+
+{-
 If our `insert` function preserves the RBT invariants, then we will only
- generate valid red-black trees. If it does not, then running QuickCheck with
- `prop_Valid` should fail.
+generate valid red-black trees. If it does not, then running QuickCheck with
+`prop_Valid` should fail.
 
 Below, we use the operator form of `fmap`, written `<$>` to first generate an
- arbitrary list of values, and then fold over that list, inserting them one by
- one. (The `InstanceSigs` extension is needed to write the type signatures directly
-with the instance definitions and the `ScopedTypeVariables` extension is needed to
-bring the type variable `a` into scope for the type annotation `Gen [a]`.)
+arbitrary list of values, and then fold over that list, inserting them one by
+one.
 -}
 
 instance (Ord a, Arbitrary a) => Arbitrary (RBT a) where
   arbitrary :: Gen (RBT a)
-  arbitrary = foldr insert empty <$> (arbitrary :: Gen [a])
+  arbitrary = fromList <$> (arbitrary :: Gen [a])
 
   {-
   >
@@ -368,10 +386,10 @@ instance (Ord a, Arbitrary a) => Arbitrary (RBT a) where
   shrink (Root (N _ l _ r)) = [blacken l, blacken r]
 
 {-
-The shrink function is used by QuickCheck to minimize counterexamples. The
+The `shrink`` function is used by QuickCheck to minimize counterexamples. The
 idea of this function is that it should, when given a tree, produce some
 smaller tree. Both the left and right subtrees of a wellformed red-black tree
-are red-black trees, as long as we make sure that their top nodes are black.
+are red-black trees as long as we make sure that their top nodes are black.
 We can ensure that the result is black using the following simple function.
 -}
 
@@ -388,7 +406,7 @@ The Hughes talk describes several methods for generating QuickCheck properties
  for an API under test. Here, we will focus on two of them: validity testing
  and metamorphic testing.
 
-* Validity Testing
+\* Validity Testing
 
 We already have defined `prop_Valid` which tests whether its argument is a
  valid red-black tree. When we use this with the `Arbitrary` instance that we
@@ -403,10 +421,17 @@ prop_DeleteValid :: RBT A -> A -> Property
 prop_DeleteValid t x = prop_Valid (delete x t)
 
 prop_ShrinkValid :: RBT A -> Property
-prop_ShrinkValid t = conjoin (map prop_Valid (shrink t))
+prop_ShrinkValid t = QC.conjoin (map prop_Valid (shrink t))
+
+-- Run all validity tests
+checkValidity :: IO ()
+checkValidity = do
+  quickCheck $ QC.withMaxSuccess 10000 prop_Valid
+  quickCheck $ QC.withMaxSuccess 10000 prop_DeleteValid
+  quickCheck $ QC.withMaxSuccess 10000 prop_ShrinkValid
 
 {-
-* Metamorphic Testing
+\* Metamorphic Testing
 
 The idea of metamorphic testing is to describe the relationship between
  multiple function calls in the interface. Focusing on `empty`, `insert`,
@@ -465,18 +490,21 @@ prop_MemberDelete k k0 t =
 -- Run all of the metamorphic tests
 checkMetamorphic :: IO ()
 checkMetamorphic = do
-  quickCheck $ withMaxSuccess 10000 prop_InsertEmpty
-  quickCheck $ withMaxSuccess 10000 prop_InsertInsert
-  quickCheck $ withMaxSuccess 10000 prop_InsertDelete
-  quickCheck $ withMaxSuccess 10000 prop_DeleteEmpty
-  quickCheck $ withMaxSuccess 10000 prop_DeleteInsert
-  quickCheck $ withMaxSuccess 10000 prop_DeleteDelete
-  quickCheck $ withMaxSuccess 10000 prop_MemberInsert
-  quickCheck $ withMaxSuccess 10000 prop_MemberDelete
+  quickCheck $ QC.withMaxSuccess 10000 prop_InsertEmpty
+  quickCheck $ QC.withMaxSuccess 10000 prop_InsertInsert
+  quickCheck $ QC.withMaxSuccess 10000 prop_InsertDelete
+  quickCheck $ QC.withMaxSuccess 10000 prop_DeleteEmpty
+  quickCheck $ QC.withMaxSuccess 10000 prop_DeleteInsert
+  quickCheck $ QC.withMaxSuccess 10000 prop_DeleteDelete
+  quickCheck $ QC.withMaxSuccess 10000 prop_MemberInsert
+  quickCheck $ QC.withMaxSuccess 10000 prop_MemberDelete
 
 {-
 Implementing the API
 --------------------
+
+Now that we know what it means for our implementation to be correct,
+we can start writing code.
 
 We now just need to implement the API functions for this data
 structure.  The `empty`, and `member` operations are
@@ -486,7 +514,7 @@ straightforward.
 empty :: RBT a
 empty = Root E
 
-member :: Ord a => a -> RBT a -> Bool
+member :: (Ord a) => a -> RBT a -> Bool
 member x (Root t) = aux t
   where
     aux E = False
@@ -497,38 +525,38 @@ member x (Root t) = aux t
 
 {-
 However, `insert` and `delete` are, of course, a bit trickier. We'll define
- them both with the help of auxiliary functions, `ins` and `del` that can
+ them both with the help of auxiliary functions, `ins` and `del`, that can
  violate the red-black invariants temporarily. To make sure that everything
  works out, we `blacken` the result of these helper functions to make sure
  that property 2 holds.
 -}
 
-insert :: Ord a => a -> RBT a -> RBT a
+insert :: (Ord a) => a -> RBT a -> RBT a
 insert x (Root t) = blacken (ins x t)
 
-delete :: Ord a => a -> RBT a -> RBT a
+delete :: (Ord a) => a -> RBT a -> RBT a
 delete x (Root t) = blacken (del x t)
 
 {-
 Implementation of insert
 ------------------------
 
-First, let's consider the implementation of `ins`. For `del`, see
-the end of the module.
+First, let's consider the implementation of `ins`.
 
 The recursive function `ins` walks down the tree until...
 -}
 
-ins :: Ord a => a -> T a -> T a
+ins :: (Ord a) => a -> T a -> T a
 {-
-... it gets to an empty leaf node, in which case
+... it gets to an empty tree, in which case
 it constructs a new (red) node containing the
 value being inserted...
 -}
 
 ins x E = N R E x E
 {-
-... finds the correct subtree to insert the value, or discovers that the value
+... or it gets to a branching node. In this case, it
+finds the correct subtree to insert the value, or discovers that the value
 being inserted is already in the tree (in which case it returns the input
 unchanged):
 -}
@@ -550,21 +578,21 @@ Balancing
 ---------
 
 In the recursive calls of `ins`, before returning the new tree, we may need to
-*rebalance* to maintain the red-black invariants. The code to do this is
+rearrange the tree to maintain the red-black invariants. The code to do this is
 encapsulated in a helper function `balance`.
 
-* The key insight in writing the balancing function is that we do not try to
-rebalance as soon as we see a red node with a red child. That can also be
+\* The key insight in writing the balancing function is that we do not try to
+rebalance as soon as we see a red node with a red child. That tree can be
 fixed just by blackening the root of the tree, so we return this tree as-is.
-(We call such trees, which violate invariants two and four only at the root
+(We call such trees, which violate invariant four only at the root
 "infrared").
 
 The real problem comes when we've inserted a new red node between a black
-parent and a red child.
-
-* i.e., the job of the balance function is to rebalance trees with a
-black-red-red path starting at the root. Since the root has two children and
-four grandchildren, there are four ways in which such a path can happen.
+parent and a red child. Here we need to rearrange trees that have a
+single black-red-red path starting at the root, but are otherwise valid.
+Because the root has two children and four grandchildren, there are
+four ways in which such a path can happen. (The letters 'a','b','c',
+and 'd' below stand for arbitrary subtrees.)
 
            B             B           B              B
           / \           / \         / \            / \
@@ -574,8 +602,8 @@ four grandchildren, there are four ways in which such a path can happen.
       / \               / \         / \                / \
      a   b             b   c       b   c              c   d
 
-* The result of rebalancing maintains the black height by converting
-to a red parent with black children.
+\* The result of rebalancing maintains the black height by converting
+all of the trees above to a red parent with black children.
 
                                      R
                                    /   \
@@ -601,7 +629,7 @@ Red-Black deletion
 Deletion is more complicated [1].
 -}
 
-del :: Ord a => a -> T a -> T a
+del :: (Ord a) => a -> T a -> T a
 del _x E = E
 del x (N _ a y b)
   | x < y = delLeft a y b
@@ -625,12 +653,12 @@ restore the invariants (using `balLeft` and `balRight`).
 
 In other words, we have an invariant that deleting an element from a *black*
 tree of height `n + 1` returns a tree of height `n`, while deleting from a
-*red* tree (or an empty tree) preserves the black height.
+\*red* tree (or an empty tree) preserves the black height.
 
 As above, the final tree that we produce may be red or black, so we blacken
 this result to restore this invariant.
 
-*Rebalancing function after a left deletion from a black-rooted tree*.
+\*Rebalancing function after a left deletion from a black-rooted tree*.
 
 There are three cases to consider:
   1. left subtree is red.
@@ -662,7 +690,7 @@ redden (N B a x b) = N R a x b
 redden _ = error "invariant violation"
 
 {-
-*Rebalance after deletion from the right subtree.* This function is symmetric
+\*Rebalance after deletion from the right subtree.* This function is symmetric
  to the above code.
 -}
 
@@ -700,18 +728,18 @@ merge (N R a x b) c = N R a x (merge b c)
 Running QuickCheck
 ------------------
 
-Using the `TemplateHaskell` extension, the following code below defines an
-operation that will invoke QuickCheck with all definitions that start with
-`prop_` above. This code must come *after* all of the definitions above (and
-`runTests` is not in scope before this point).
--}
+Finally, now that we have completed the implementation, we can
+verify that it works by running all of our tests.
 
-return []
+main = IO ()
+main = do
+  putStrLn "Testing: isBST_isBST'"
+  quickCheck prop_isBST_isBST'
+  putStrLn "Validity tests
+  checkValidity
+  putStrLn "Metamorphic tests"
+  checkMetamorphic
 
-runTests :: IO Bool
-runTests = $quickCheckAll
-
-{-
 Notes
 -----
 
@@ -732,4 +760,76 @@ trees with types", Journal of functional programming, 11(04), pp 425-432, July
 [4] Joachim Breitner's [talk](https://www.youtube.com/watch?v=xcm_H36v_18) develops
  an optimized ordering check for binary trees, showing at each step why it is
  equivalent to the simpler version.
+
+To check whether the two definitions of `isBST` are equal, we can create a
+quickcheck property that tests the function on random trees.
+-}
+
+prop_isBST_isBST' :: (Ord a) => RBT a -> QC.Property
+prop_isBST_isBST' t = QC.property (isBST t == isBST' t)
+
+{-
+[5] We can use QuickCheck to find out how many random trees violate the RBT property.
+
+This function is a generator that produces a reasonable distribution of random trees.
+-}
+
+-- >>> QC.sample' (anyRBT:: Gen (RBT Int))
+
+anyRBT :: forall a. (Ord a, Arbitrary a) => Gen (RBT a)
+anyRBT = Root <$> QC.sized aux
+  where
+    aux :: Int -> Gen (T a)
+    aux 1 = return E
+    aux d =
+      QC.frequency
+        [ (1, return E),
+          ( d,
+            N
+              <$> QC.oneof [return R, return B] -- color
+              <*> aux (d `div` 2) -- left subtree
+              <*> arbitrary -- value
+              <*> aux (d `div` 2) -- right subtree
+          )
+        ]
+
+{-
+>
+-}
+
+-- | This property uses QC's `label` function to identify which properties
+-- fail for each generated tree. It then calculates the percentages of trees
+-- with each label. Only unlabeled trees are valid.
+prop_howManyValid :: Property
+prop_howManyValid = QC.forAll (anyRBT :: Gen (RBT Int)) $ \t ->
+  QC.label
+    ( (if not (isRootBlack t) then "RB2 " else "")
+        <> (if not (consistentBlackHeight t) then "RB3 " else "")
+        <> (if not (noRedRed t) then "RB4 " else "")
+        <> (if not (isBST t) then "BST " else "")
+    )
+    True
+
+{-
+Running this property in GHC, with 10000 tests, reveals that only 7% of
+the generated trees are valid. The largest category violates all *four*
+invariants.
+
+                  +++ OK, passed 10000 tests:
+                  42.53% RB2 RB3 RB4 BST
+                  39.42% RB3 RB4 BST
+                  6.98%
+                  4.50% RB3 BST
+                  2.39% RB2 RB3 BST
+                  0.97% RB2
+                  0.92% RB2 RB4 BST
+                  0.77% BST
+                  0.41% RB4 BST
+                  0.29% RB2 BST
+                  0.29% RB3
+                  0.23% RB2 RB3
+                  0.19% RB2 RB4
+                  0.09% RB2 RB3 RB4
+                  0.02% RB4
+
 -}
