@@ -1,6 +1,7 @@
 {-
 ---
 fulltitle: Red Black Trees
+date: October 7, 2024
 ---
 
 This module implements a persistent version of a common balanced tree
@@ -19,7 +20,7 @@ If you would rather read a paper than watch a talk, John Hughes also has
 written a [paper](https://research.chalmers.se/en/publication/517894) about
 this talk.
 
-The `06-persisent` quiz covers both the video and the module below.
+The `06-persistent` quiz covers both the video and the module below.
 -}
 
 module RedBlack where
